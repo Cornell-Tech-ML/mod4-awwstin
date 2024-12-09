@@ -5,11 +5,43 @@ Be sure you have minitorch installed in you Virtual Env.
 
 import minitorch
 
-# Use this function to make a random parameter in
-# your module.
+
 def RParam(*shape):
     r = 2 * (minitorch.rand(shape) - 0.5)
     return minitorch.Parameter(r)
+
+
+class Network(minitorch.Module):
+    def __init__(self, hidden_layers):
+        super().__init__()
+
+        # Submodules
+        self.layer1 = Linear(2, hidden_layers)
+        self.layer2 = Linear(hidden_layers, hidden_layers)
+        self.layer3 = Linear(hidden_layers, 1)
+
+    def forward(self, x):
+        y1 = self.layer1.forward(x).relu()
+        y2 = self.layer2.forward(y1).relu()
+        y3 = self.layer3.forward(y2).sigmoid()
+        return y3
+
+
+class Linear(minitorch.Module):
+    def __init__(self, in_size, out_size):
+        super().__init__()
+        self.weights = RParam(in_size, out_size)
+        self.bias = RParam(out_size)
+        self.out_size = out_size
+
+    def forward(self, x):
+        batch_size, in_size = x.shape
+        w = self.weights.value.view(1, in_size, self.out_size)
+        x = x.view(batch_size, in_size, 1)
+        t = w * x # (batch_size, in_size, self.out_size)
+        t = t.sum(1).view(batch_size, self.out_size)
+        b = self.bias.value.view(1, self.out_size)
+        return t + b
 
 
 def default_log_fn(epoch, total_loss, correct, losses):
@@ -28,13 +60,14 @@ class TensorTrain:
         return self.model.forward(minitorch.tensor(X))
 
     def train(self, data, learning_rate, max_epochs=500, log_fn=default_log_fn):
+
         self.learning_rate = learning_rate
         self.max_epochs = max_epochs
         self.model = Network(self.hidden_layers)
         optim = minitorch.SGD(self.model.parameters(), learning_rate)
 
         X = minitorch.tensor(data.X)
-        y = minitorch.tensor(data.y)
+        y = minitorch.tensor(data.y).view(data.N, 1)  # Ensure y has shape (N, 1)
 
         losses = []
         for epoch in range(1, self.max_epochs + 1):
@@ -43,22 +76,28 @@ class TensorTrain:
             optim.zero_grad()
 
             # Forward
-            out = self.model.forward(X).view(data.N)
+            out = self.model.forward(X)
             prob = (out * y) + (out - 1.0) * (y - 1.0)
 
+            # Calculate loss
             loss = -prob.log()
-            (loss / data.N).sum().view(1).backward()
-            total_loss = loss.sum().view(1)[0]
+            (loss / data.N).sum().backward()
+            total_loss = loss.sum().item()
             losses.append(total_loss)
 
-            # Update
+            # Update parameters
             optim.step()
+
+            # Calculate correct predictions
+            predictions = (out > 0.5)
+            correct = int((predictions == y).sum().item())
 
             # Logging
             if epoch % 10 == 0 or epoch == max_epochs:
-                y2 = minitorch.tensor(data.y)
-                correct = int(((out.detach() > 0.5) == y2).sum()[0])
                 log_fn(epoch, total_loss, correct, losses)
+
+
+
 
 
 if __name__ == "__main__":
