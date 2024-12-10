@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Iterable, Optional, Sequence, Tuple, Type, Union
-
 import numpy as np
 
 from dataclasses import field
@@ -48,7 +47,7 @@ class ScalarHistory:
 _var_count = 0
 
 
-@dataclass
+@dataclass(frozen=True)
 class Scalar:
     """A reimplementation of scalar values for autodifferentiation
     tracking. Scalar Variables behave as close as possible to standard
@@ -60,41 +59,96 @@ class Scalar:
     data: float
     history: Optional[ScalarHistory] = field(default_factory=ScalarHistory)
     derivative: Optional[float] = None
-    name: str = field(default="")
-    unique_id: int = field(default=0)
+    name: Optional[str] = None
+    unique_id: int = field(init=False, default=0)
 
     def __post_init__(self):
+        """Initialize the scalar."""
         global _var_count
         _var_count += 1
         object.__setattr__(self, "unique_id", _var_count)
-        object.__setattr__(self, "name", str(self.unique_id))
+        if self.name is None:
+            object.__setattr__(self, "name", str(self.unique_id))
         object.__setattr__(self, "data", float(self.data))
 
     def __repr__(self) -> str:
+        """Return a string representation of the scalar."""
         return f"Scalar({self.data})"
 
-    def __mul__(self, b: ScalarLike) -> Scalar:
-        return Mul.apply(self, b)
+    # Implementations for Task 1.2
 
-    def __truediv__(self, b: ScalarLike) -> Scalar:
-        return Mul.apply(self, Inv.apply(b))
+    def __add__(self, other: ScalarLike) -> Scalar:
+        """Add two scalars."""
+        return Add.apply(self, other)
 
-    def __rtruediv__(self, b: ScalarLike) -> Scalar:
-        return Mul.apply(b, Inv.apply(self))
+    def __radd__(self, other: ScalarLike) -> Scalar:
+        """Add two scalars."""
+        return self + other
+
+    def __mul__(self, other: ScalarLike) -> Scalar:
+        """Multiply two scalars."""
+        return Mul.apply(self, other)
+
+    def __rmul__(self, other: ScalarLike) -> Scalar:
+        """Multiply two scalars."""
+        return self * other
+
+    def __sub__(self, other: ScalarLike) -> Scalar:
+        """Subtract two scalars."""
+        return Add.apply(self, Neg.apply(other))
+
+    def __rsub__(self, other: ScalarLike) -> Scalar:
+        """Subtract two scalars."""
+        return Add.apply(other, Neg.apply(self))
+
+    def __neg__(self) -> Scalar:
+        """Negate a scalar."""
+        return Neg.apply(self)
+
+    def __truediv__(self, other: ScalarLike) -> Scalar:
+        """Divide two scalars."""
+        return Mul.apply(self, Inv.apply(other))
+
+    def __rtruediv__(self, other: ScalarLike) -> Scalar:
+        """Divide two scalars."""
+        return Mul.apply(other, Inv.apply(self))
+
+    def __lt__(self, other: ScalarLike) -> Scalar:
+        """Compare two scalars."""
+        return LT.apply(self, other)
+
+    def __gt__(self, other: ScalarLike) -> Scalar:
+        """Compare two scalars."""
+        return LT.apply(other, self)
+
+    def __eq__(self, other: ScalarLike) -> Scalar:
+        """Compare two scalars."""
+        return EQ.apply(self, other)
+
+    def log(self) -> Scalar:
+        """Compute the natural logarithm of a scalar."""
+        return Log.apply(self)
+
+    def exp(self) -> Scalar:
+        """Compute the exponential of a scalar."""
+        return Exp.apply(self)
+
+    def sigmoid(self) -> Scalar:
+        """Compute the sigmoid of a scalar."""
+        return Sigmoid.apply(self)
+
+    def relu(self) -> Scalar:
+        """Compute the ReLU of a scalar."""
+        return ReLU.apply(self)
 
     def __bool__(self) -> bool:
+        """Convert a scalar to a boolean."""
         return bool(self.data)
-
-    def __radd__(self, b: ScalarLike) -> Scalar:
-        return self + b
-
-    def __rmul__(self, b: ScalarLike) -> Scalar:
-        return self * b
 
     # Variable elements for backprop
 
     def accumulate_derivative(self, x: Any) -> None:
-        """Add `val` to the the derivative accumulated on this variable.
+        """Add `x` to the derivative accumulated on this variable.
         Should only be called during autodifferentiation on leaf variables.
 
         Args:
@@ -104,29 +158,40 @@ class Scalar:
         """
         assert self.is_leaf(), "Only leaf variables can have derivatives."
         if self.derivative is None:
-            self.__setattr__("derivative", 0.0)
-        self.__setattr__("derivative", self.derivative + x)
+            object.__setattr__(self, "derivative", 0.0)
+        object.__setattr__(self, "derivative", self.derivative + x)
 
     def is_leaf(self) -> bool:
-        """True if this variable created by the user (no `last_fn`)"""
+        """True if this variable was created by the user (no `last_fn`)"""
         return self.history is not None and self.history.last_fn is None
 
     def is_constant(self) -> bool:
+        """True if this variable was created by an operation (has `last_fn`)."""
         return self.history is None
 
     @property
     def parents(self) -> Iterable[Variable]:
-        """Get the variables used to create this one."""
+        """Get the parent variables of this scalar."""
         assert self.history is not None
         return self.history.inputs
 
     def chain_rule(self, d_output: Any) -> Iterable[Tuple[Variable, Any]]:
+        """Apply the chain rule to get the derivatives of the parents."""
         h = self.history
         assert h is not None
         assert h.last_fn is not None
         assert h.ctx is not None
 
-        raise NotImplementedError("Need to include this file from past assignment.")
+        # Use the _backward method to ensure that derivatives is a tuple
+        derivatives = h.last_fn._backward(h.ctx, d_output)
+
+        # Pair each input variable with its corresponding derivative
+        # Filter out constants (variables where is_constant() is True)
+        return [
+            (input_var, derivative)
+            for input_var, derivative in zip(h.inputs, derivatives)
+            if not input_var.is_constant()
+        ]
 
     def backward(self, d_output: Optional[float] = None) -> None:
         """Calls autodiff to fill in the derivatives for the history of this object.
@@ -141,25 +206,24 @@ class Scalar:
             d_output = 1.0
         backpropagate(self, d_output)
 
-    raise NotImplementedError("Need to include this file from past assignment.")
 
-
+@staticmethod
 def derivative_check(f: Any, *scalars: Scalar) -> None:
     """Checks that autodiff works on a python function.
     Asserts False if derivative is incorrect.
 
-    Parameters
-    ----------
-        f : function from n-scalars to 1-scalar.
-        *scalars  : n input scalar values.
+    Args:
+    ----
+        f: Function from n-scalars to 1-scalar.
+        *scalars: Input scalar values.
 
     """
     out = f(*scalars)
     out.backward()
 
     err_msg = """
-Derivative check at arguments f(%s) and received derivative f'=%f for argument %d,
-but was expecting derivative f'=%f from central difference."""
+    Derivative check at arguments f(%s) and received derivative f'=%f for argument %d,
+    but was expecting derivative f'=%f from central difference."""
     for i, x in enumerate(scalars):
         check = central_difference(f, *scalars, arg=i)
         print(str([x.data for x in scalars]), x.derivative, i, check)

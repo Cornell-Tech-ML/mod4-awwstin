@@ -31,8 +31,19 @@ def test_avg(t: Tensor) -> None:
 @pytest.mark.task4_4
 @given(tensors(shape=(2, 3, 4)))
 def test_max(t: Tensor) -> None:
-    # TODO: Implement for Task 4.4.
-    raise NotImplementedError("Need to implement for Task 4.4")
+    """Test the max reduction operation."""
+    # dimension 0
+    out0 = minitorch.nn.max(t, 0)
+    max0 = max([t[a, 0, 0] for a in range(2)])
+    assert_close(out0[0, 0, 0], max0)
+    # dimension 1
+    out1 = minitorch.nn.max(t, 1)
+    max1 = max([t[0, b, 0] for b in range(3)])
+    assert_close(out1[0, 0, 0], max1)
+    # dimension 2
+    out2 = minitorch.nn.max(t, 2)
+    max2 = max([t[0, 0, c] for c in range(4)])
+    assert_close(out2[0, 0, 0], max2)
 
 
 @pytest.mark.task4_4
