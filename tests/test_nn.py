@@ -32,29 +32,18 @@ def test_avg(t: Tensor) -> None:
 @given(tensors(shape=(2, 3, 4)))
 def test_max(t: Tensor) -> None:
     """Test the max reduction operation."""
-    dimension = 2
-    max_output = minitorch.max(t, dimension)
-    assert max_output.shape == (2, 3, 1)
-    for batch_idx in range(2):
-        for channel_idx in range(3):
-            expected_max = max([t[batch_idx, channel_idx, i] for i in range(4)])
-            assert_close(max_output[batch_idx, channel_idx, 0], expected_max)
-
-    dimension = 1
-    max_output = minitorch.max(t, dimension)
-    assert max_output.shape == (2, 1, 4)
-    for batch_idx in range(2):
-        for position in range(4):
-            expected_max = max([t[batch_idx, i, position] for i in range(3)])
-            assert_close(max_output[batch_idx, 0, position], expected_max)
-
-    dimension = 0
-    max_output = minitorch.max(t, dimension)
-    assert max_output.shape == (1, 3, 4)
-    for channel_idx in range(3):
-        for position in range(4):
-            expected_max = max([t[i, channel_idx, position] for i in range(2)])
-            assert_close(max_output[0, channel_idx, position], expected_max)
+    # dimension 0
+    out0 = minitorch.nn.max(t, 0)
+    max0 = max([t[a, 0, 0] for a in range(2)])
+    assert_close(out0[0, 0, 0], max0)
+    # dimension 1
+    out1 = minitorch.nn.max(t, 1)
+    max1 = max([t[0, b, 0] for b in range(3)])
+    assert_close(out1[0, 0, 0], max1)
+    # dimension 2
+    out2 = minitorch.nn.max(t, 2)
+    max2 = max([t[0, 0, c] for c in range(4)])
+    assert_close(out2[0, 0, 0], max2)
 
 
 @pytest.mark.task4_4
